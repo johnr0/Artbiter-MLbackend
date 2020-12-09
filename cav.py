@@ -108,18 +108,34 @@ def get_imarray(filename):
 def flattened_gram(imarray, session):
     grams = np.empty([EMBED_SIZE])    
     index = 0
+
+    styles = {}
+    
     for i in range(5):
+        intermediate = session.run(model['conv' + str(i+1) + '_1'], 
+                feed_dict={model['image']: imarray})
+        # if i==3 or i==4:
+        #     intermediate2 = session.run(model['relu' + str(i+1) + '_1'], 
+        #         feed_dict={model['image']: imarray})
+        #     intermediate2 = np.moveaxis(intermediate2, 3, 1)
+        #     print(intermediate2.shape)
+        #     styles['relu'+str(i+1)+'_1'] = intermediate2.tolist()
         grams[index:(NUM_CHANNELS[i]**2 + index)] = gram_matrix(
-            session.run(model['conv' + str(i+1) + '_1'], 
-                feed_dict={model['image']: imarray}), 
+            intermediate, 
             NUM_CHANNELS[i], 
             LAYER_IM_SIZE[i]**2).flatten()
         index += NUM_CHANNELS[i]**2
+        print(i, intermediate.shape)
     return grams
 
 def images2embeddings(imarray, session, PCAmodel):
     # imarray = np.asarray([misc.imresize(imarray, (224, 224))])
-    intermediate_embeddings = np.asarray([flattened_gram(ia.reshape(1, ia.shape[0], ia.shape[1], ia.shape[2]), session) for ia in imarray])
+    flattened_grams = []
+    im_styles = []
+    for ia in imarray:
+        grams = flattened_gram(ia.reshape(1, ia.shape[0], ia.shape[1], ia.shape[2]), session)
+        flattened_grams.append(grams)
+    intermediate_embeddings = np.asarray(flattened_grams)
     print('yeah', intermediate_embeddings.shape)
     # print(len(intermediate_embeddings.shape))
     if len(intermediate_embeddings.shape)==1:

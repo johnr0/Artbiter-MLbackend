@@ -13,8 +13,14 @@ import re
 import base64
 from io import BytesIO
 import json
+import torch
 
 from cav import *
+
+from SANet import SA_vgg, decoder, Transform, test_transform
+from torchvision.utils import save_image
+from torchvision import transforms
+import torch.nn as nn
 
 image_data_path = '../../Data/wikiart/'
 
@@ -41,6 +47,36 @@ random_sampled = tree.get_arrays()[0][random_sampled]
 app = FlaskAPI(__name__)
 
 background = Image.new('RGB', (224, 224), (255,255,255))
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+SA_decoder = decoder
+SA_transform = Transform(in_planes = 512)
+SA_vgg = SA_vgg
+
+SA_decoder.eval()
+SA_transform.eval()
+SA_vgg.eval()
+
+SA_decoder.load_state_dict(torch.load('SANet_decoder_iter_500000.pth'))
+SA_transform.load_state_dict(torch.load('SANet_transformer_iter_500000.pth'))
+SA_vgg.load_state_dict(torch.load('SANet_vgg_normalised.pth'))
+
+norm = nn.Sequential(*list(SA_vgg.children())[:1])
+enc_1 = nn.Sequential(*list(SA_vgg.children())[:4])  # input -> relu1_1
+enc_2 = nn.Sequential(*list(SA_vgg.children())[4:11])  # relu1_1 -> relu2_1
+enc_3 = nn.Sequential(*list(SA_vgg.children())[11:18])  # relu2_1 -> relu3_1
+enc_4 = nn.Sequential(*list(SA_vgg.children())[18:31])  # relu3_1 -> relu4_1
+enc_5 = nn.Sequential(*list(SA_vgg.children())[31:44])  # relu4_1 -> relu5_1
+
+norm.to(device)
+enc_1.to(device)
+enc_2.to(device)
+enc_3.to(device)
+enc_4.to(device)
+enc_5.to(device)
+SA_decoder.to(device)
+SA_transform.to(device)
+
 
 @app.route('/example/', methods=['GET', 'POST'])
 def example():
@@ -69,7 +105,20 @@ def image_to_embedding():
             embeddings = images2embeddings(img_array, sess, PCAmodel)
             # print(embeddings[0])
             embedding = json.dumps(embeddings[0].tolist())
-            return {'message': 'returning embedding', 'embedding': embedding}
+            # style = json.dumps(styles[0])
+
+        style_tf = test_transform()
+        style = style_tf(img)
+        style = style.to(device).unsqueeze(0)
+        with torch.no_grad():
+            Style4_1 = enc_4(enc_3(enc_2(enc_1(style))))
+            Style5_1 = enc_5(Style4_1)
+        style_send = {}
+        style_send['relu4_1'] = Style4_1.tolist()
+        style_send['relu5_1'] = Style5_1.tolist()
+        print(type(style_send['relu4_1']))
+        style = json.dumps(style_send)
+        return {'message': 'returning embedding', 'embedding': embedding, 'style': style}
 
     return {'message': 'No GET ability'}
 
@@ -89,9 +138,73 @@ def trainCAV():
         print(cavs)
         for key in cavs:
             cavs[key] = cavs[key].tolist()
+
+        # styles = json.loads(request.data['styles'])
+        # avg_styles = {}
+        # for key in styles:
+        #     avg_styles[key] = {}
+        #     group_style = styles[key]
+        #     for dim in group_style[0].keys():
+        #         style_vec = np.zeros(group_style[0][dim].shape)
+        #         for style in group_style:
+        #             style_vec = style_vec+style[dim]
+        #         avg_styles[key][dim] = (style_vec / len(group_style)).tolist()
+            
+
+
         return {'cavs': json.dumps(cavs)}
 
     return {'message': 'No GET ability'}
+
+@app.route('/sliderImpact', methods=['GET', 'POST'])
+def sliderImpact():
+    if request.method=='POST':
+        cavs = json.loads(request.data['cavs'])
+        for key in cavs:
+            cavs[key] = np.asarray(cavs[key])
+            cavs[key] = cavs[key].reshape((1,300))
+        search_slider_values = json.loads(request.data['search_slider_values'])
+        print(search_slider_values)
+        cur_image = np.asarray(json.loads(request.data['cur_image'])).reshape((1,300))
+        # print('til here')
+        distances = {}
+        tree_arr = tree.get_arrays()
+        # print('tree shape',tree_arr[0].shape)
+        base_arr = cur_image
+        for key2 in search_slider_values:
+            base_arr = base_arr + search_slider_values[key2] * cavs[key2]
+        for key1 in search_slider_values:
+            distance = []
+            vectors = []
+            # print(cavs[key1].shape)
+            base_arr = base_arr - search_slider_values[key1] * cavs[key1]
+            
+            for i in [-1, -0.8, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8, 1]:
+                cur_arr = base_arr + i * cavs[key1]
+                # print(cur_arr)
+                searched = tree.query(cur_arr, k=5)
+                v_arr = np.zeros((1, 300))
+                # print(searched[1][0])
+                for idx in searched[1][0]:
+                    v_arr = v_arr + tree_arr[0][idx]
+                # print(v_arr/10)
+                vectors.append(v_arr/5)
+            standard_arr = base_arr + search_slider_values[key1] * cavs[key1]
+            for j in range(10):
+                # print(vectors[j]-vectors[0])
+                distance.append(np.linalg.norm(vectors[j]-cur_image))
+            # print(distance)
+            if np.max(distance)!=0:
+                distance = distance/np.max(np.abs(distance))
+            # for idx, d in enumerate(distance):
+            #     if np.max(distance)!=0:
+            #         distance[idx] = d/np.max(np.abs(distance))
+            print(distance)
+            distances[key1] = list(distance)
+                # print('tree', searched)
+        return {'distances': json.dumps(distances)}
+
+    return {'message': ' No GET ability'}
 
 @app.route('/searchImages', methods=['GET', 'POST'])
 def searchImages():
@@ -114,6 +227,46 @@ def searchImages():
             returned_images.append(image_file)
         
         return {'returned_images': json.dumps(returned_images)}
+
+    return {'message': 'No GET ability'}
+
+@app.route('/generateImage', methods=['GET', 'POST'])
+def generateImage():
+    if request.method=='POST':
+        content = json.loads(request.data['content'])
+        content_weight = float(request.data['content_weight'])
+        for k in content:
+            content[k] = torch.FloatTensor(content[k])
+        styles = json.loads(request.data['styles'])
+        style_weights=json.loads(request.data['style_weights'])
+        style={}
+        for k in content:
+            s=content[k]*content_weight
+            for sk in styles:
+                s = s + style_weights[sk] * torch.FloatTensor(styles[sk][k])
+            style[k] = s
+        for k in content:
+            print(k)
+            print(content[k].shape, style[k].shape)
+        with torch.no_grad():
+            start_time = time.time()
+            gen_result = SA_decoder(SA_transform(content['relu4_1'], style['relu4_1'], content['relu5_1'], style['relu5_1']))
+            print('time', time.time()-start_time)
+
+            gen_result.clamp(0, 255)
+        gen_result = gen_result.cpu()
+        # im_np = gen_result.numpy()
+        # print(im_np.shape)
+        # im = Image.fromarray(np.uint8(im_np*255))
+        im = transforms.ToPILImage(mode='RGB')(gen_result[0])#.convert("RGB")
+        buffer = BytesIO()
+        im.save(buffer, format="JPEG")
+        image_file = base64.b64encode(buffer.getvalue()).decode()
+        image_file = 'data:image/png;base64,{}'.format(image_file)
+
+        # save_image(gen_result, 'gen_test.jpg')
+        return {'returned_images': json.dumps([image_file])}
+        
 
     return {'message': 'No GET ability'}
 
