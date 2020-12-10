@@ -151,11 +151,11 @@ def gram_matrix(F, N, M):
     return np.dot(np.transpose(Ft), Ft)
 
 
-def train_concepts(embedding_dict, random_sampled=None, model_type='linear', alpha=.01, max_iter=1000, tol=1e-3):
+def train_concepts(embedding_dict, random_sampled=None, dim=300, model_type='linear', alpha=.01, max_iter=1000, tol=1e-3):
     # create training dataset
     cavs = {}
 
-    data = np.zeros((0, 300))
+    data = np.zeros((0, dim))
     labels = []
     label2text = []
     if random_sampled is not None:

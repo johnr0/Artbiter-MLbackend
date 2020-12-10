@@ -40,6 +40,9 @@ artlist = pickle.load(open('final_artlist.pkl', 'rb'))
 PCAmodel = pickle.load(open('PCA_model.pkl', 'rb'))
 tree = pickle.load(open('final_tree.pickle', 'rb'))
 
+random_sampled_long = np.load('sampled_long_embedding.npy')
+print('random sampled long', random_sampled_long.shape)
+
 random_sampled = np.random.choice(tree.get_arrays()[0].shape[0], 20, replace=False)
 random_sampled = tree.get_arrays()[0][random_sampled]
 
@@ -156,9 +159,67 @@ def trainCAV():
 
     return {'message': 'No GET ability'}
 
+@app.route('/trainStyleCAV', methods=['GET', 'POST'])
+def trainStyleCAV():
+    if request.method == 'POST':
+        styles = json.loads(request.data['styles'])
+        print(styles.keys())
+        dims = {}
+        embeddings = {}
+        for group_key in styles:
+            embeddings[group_key]=None
+            group = styles[group_key]
+            for art in group:
+                print(art.keys())
+                style_flatten=None
+                for layer_key in art:
+                    print(layer_key)
+                    cur_arr = np.asarray(art[layer_key])
+                    if layer_key not in dims:
+                        dims[layer_key] = cur_arr.shape
+                    cur_arr = cur_arr.flatten()
+                    cur_arr = np.reshape(cur_arr, (1,cur_arr.shape[0]))
+                    if style_flatten is None:
+                        style_flatten = cur_arr
+                    else:
+                        style_flatten = np.concatenate((style_flatten, cur_arr), axis=1)
+                        # print(style_flatten.shape)
+                if embeddings[group_key] is None:
+                    embeddings[group_key] = style_flatten
+                else: 
+                    embeddings[group_key] = np.concatenate((embeddings[group_key], style_flatten), axis=0)
+            print(embeddings[group_key].shape)
+        print(embeddings.keys())
+        if len(embeddings.keys())==1:
+            cavs = train_concepts(embeddings, random_sampled_long, dim=501760)
+        else:
+            cavs = train_concepts(embeddings, dim=501760)
+        print(cavs.keys())
+        print(dims.keys())
+        fdim = dims[list(dims.keys())[0]]
+        dim_len = 1
+        for d in fdim:
+            dim_len = dim_len*d
+        print(dim_len)
+        styles = {}
+        for group_key in cavs:
+            styles[group_key] = {}
+            layers = np.split(cavs[group_key], [dim_len])
+            for idx, d in enumerate(list(dims.keys())):
+                print(idx, d)
+                styles[group_key][d] = np.reshape(layers[idx], dims[d]).tolist()
+
+        return  {'styles': json.dumps(styles)}
+
+        
+
+
+    return {'message': 'No GET ability'}
+
 @app.route('/sliderImpact', methods=['GET', 'POST'])
 def sliderImpact():
     if request.method=='POST':
+        num = 1
         cavs = json.loads(request.data['cavs'])
         for key in cavs:
             cavs[key] = np.asarray(cavs[key])
@@ -179,18 +240,18 @@ def sliderImpact():
             # print(cavs[key1].shape)
             base_arr = base_arr - search_slider_values[key1] * cavs[key1]
             
-            for i in [-1, -0.8, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8, 1]:
+            for i in [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]:
                 cur_arr = base_arr + i * cavs[key1]
                 # print(cur_arr)
-                searched = tree.query(cur_arr, k=5)
+                searched = tree.query(cur_arr, k=num)
                 v_arr = np.zeros((1, 300))
                 # print(searched[1][0])
                 for idx in searched[1][0]:
                     v_arr = v_arr + tree_arr[0][idx]
                 # print(v_arr/10)
-                vectors.append(v_arr/5)
+                vectors.append(v_arr/num)
             standard_arr = base_arr + search_slider_values[key1] * cavs[key1]
-            for j in range(10):
+            for j in range(9):
                 # print(vectors[j]-vectors[0])
                 distance.append(np.linalg.norm(vectors[j]-cur_image))
             # print(distance)
@@ -270,7 +331,20 @@ def generateImage():
 
     return {'message': 'No GET ability'}
 
-
+@app.route('/randomSearchImage', methods=['GET', 'POST'])
+def randomSearchImage():
+    if request.method=='POST':
+        # list(range(tree.get_arrays()[0].shape[0]))
+        sampled = np.random.choice(tree.get_arrays()[0].shape[0], 10, replace=False)
+        returned_images = []
+        for idx in sampled:
+            image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
+            image_file = 'data:image/png;base64,{}'.format(image_file)
+            print(image_file)
+            returned_images.append(image_file)
+        
+        return {'returned_images': json.dumps(returned_images)}
+    return {'message': 'No GET ability'}
 
 if __name__=="__main__":
     app.run(debug=True)
