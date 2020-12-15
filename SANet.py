@@ -150,7 +150,15 @@ class Transform(nn.Module):
         self.merge_conv_pad = nn.ReflectionPad2d((1, 1, 1, 1))
         self.merge_conv = nn.Conv2d(in_planes, in_planes, (3, 3))
     def forward(self, content4_1, style4_1, content5_1, style5_1):
-        return self.merge_conv(self.merge_conv_pad(self.sanet4_1(content4_1, style4_1) + self.upsample5_1(self.sanet5_1(content5_1, style5_1))))
+        print(self.sanet4_1(content4_1, style4_1).size())
+        print(self.sanet5_1(content5_1, style5_1).size())
+        print('problem in upsampling?') 
+        sa4_1 = self.sanet4_1(content4_1, style4_1)
+        upsample5_1 = nn.Upsample(size=(sa4_1.size()[2], sa4_1.size()[3]), mode='nearest')
+
+        sa5_1 = upsample5_1(self.sanet5_1(content5_1, style5_1))
+        print('5_1 size?', sa5_1.size())
+        return self.merge_conv(self.merge_conv_pad(sa4_1 + upsample5_1(self.sanet5_1(content5_1, style5_1))))
 
 def test_transform():
     transform_list = []

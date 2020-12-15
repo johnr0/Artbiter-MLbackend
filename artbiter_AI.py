@@ -16,9 +16,10 @@ import json
 import torch
 
 from cav import *
+from preprocessing import *
 
 from SANet import SA_vgg, decoder, Transform, test_transform
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 from torchvision import transforms
 import torch.nn as nn
 
@@ -80,6 +81,23 @@ enc_5.to(device)
 SA_decoder.to(device)
 SA_transform.to(device)
 
+def openImage(raw_img):
+    image_data = re.sub('^data:image/.+;base64.', '',raw_img)
+        # print(image_data[0:10])
+    byte_data = base64.b64decode(image_data)
+    image_data = BytesIO(byte_data)
+    img =Image.open(image_data)
+    if img.mode=='RGBA' or img.mode=='L':
+        img = img.convert('RGB')
+    return img
+
+def imTOPIL(gen_result):
+    grid = make_grid(gen_result, nrow=8, padding=2, pad_value=False,
+                     normalize=False, range=None, scale_each=False)
+    # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+    ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
+    return Image.fromarray(ndarr)
+
 
 @app.route('/example/', methods=['GET', 'POST'])
 def example():
@@ -89,12 +107,14 @@ def example():
 def image_to_embedding():
     if request.method == 'POST':
         # print(request.data.keys())
-        image_data = re.sub('^data:image/.+;base64.', '',request.data['image'])
-        # print(image_data[0:10])
-        byte_data = base64.b64decode(image_data)
-        image_data = BytesIO(byte_data)
-        img = Image.open(image_data)
-        img = img.resize((224, 224))
+        ori_img = openImage(request.data['image'])
+        # image_data = re.sub('^data:image/.+;base64.', '',request.data['image'])
+        # # print(image_data[0:10])
+        # byte_data = base64.b64decode(image_data)
+        # image_data = BytesIO(byte_data)
+        # ori_img = Image.open(image_data)
+        img = preprocessing_image(ori_img, 224, 224, 224)
+        # img = ori_img.resize((224, 224))
         
         if img.mode=='RGBA' or img.mode=='L':
             img = img.convert('RGB')
@@ -106,10 +126,9 @@ def image_to_embedding():
         # print(img_array.shape)
         with tf.Session(graph=graph) as sess:
             embeddings = images2embeddings(img_array, sess, PCAmodel)
-            # print(embeddings[0])
             embedding = json.dumps(embeddings[0].tolist())
-            # style = json.dumps(styles[0])
-
+        
+    
         style_tf = test_transform()
         style = style_tf(img)
         style = style.to(device).unsqueeze(0)
@@ -119,7 +138,7 @@ def image_to_embedding():
         style_send = {}
         style_send['relu4_1'] = Style4_1.tolist()
         style_send['relu5_1'] = Style5_1.tolist()
-        print(type(style_send['relu4_1']))
+        print(type(style_send['relu4_1']), Style4_1.shape)
         style = json.dumps(style_send)
         return {'message': 'returning embedding', 'embedding': embedding, 'style': style}
 
@@ -313,13 +332,16 @@ def generateImage():
             start_time = time.time()
             gen_result = SA_decoder(SA_transform(content['relu4_1'], style['relu4_1'], content['relu5_1'], style['relu5_1']))
             print('time', time.time()-start_time)
-
+            
             gen_result.clamp(0, 255)
         gen_result = gen_result.cpu()
+        print(gen_result)
         # im_np = gen_result.numpy()
         # print(im_np.shape)
         # im = Image.fromarray(np.uint8(im_np*255))
-        im = transforms.ToPILImage(mode='RGB')(gen_result[0])#.convert("RGB")
+        # im = transforms.ToPILImage(mode='RGB')(gen_result[0])#.convert("RGB")
+        im = imTOPIL(gen_result)
+        im.save('./other_gen_test.png')
         buffer = BytesIO()
         im.save(buffer, format="JPEG")
         image_file = base64.b64encode(buffer.getvalue()).decode()
@@ -330,6 +352,128 @@ def generateImage():
         
 
     return {'message': 'No GET ability'}
+
+@app.route('/generateImageWithScaling', methods=['GET', 'POST'])
+def generateImageWithScaling():
+    if request.method=='POST':
+        content = json.loads(request.data['content'])
+        styles = json.loads(request.data['styles'])
+
+        # get the dimensions first
+        print(content.keys())
+        content['image']= openImage(content['content_image'])
+        content['content_mask'] = openImage(content['content_mask'])
+        content['content_mask'] = content['content_mask'].crop((content['content_position']['left'], content['content_position']['top'], content['content_position']['right'], content['content_position']['bottom']))
+        print(content['image'].size)
+        if content['image'].size[0]>content['image'].size[1]:
+            content_width = 512
+            content_height = int(512 * content['image'].size[1]/content['image'].size[0])
+            content_side = content_height
+        else:
+            content_height = 512
+            content_width = int(512 * content['image'].size[0]/content['image'].size[1])
+            content_side = content_width
+        print(content_height, content_width, content_side)
+        sides = []
+        sides.append(content_side)
+        content['image'] = content['image'].resize([content_width, content_height])
+        
+        for style in styles:
+            style['image'] = openImage(style['file'])
+            side = np.min(style['image'].size)/np.max(style['image'].size)*style['scale']/content['content_scale']*content_side
+            if style['image'].size[0]<style['image'].size[1]:
+                width = int(side)
+                height = int(side * style['image'].size[1]/style['image'].size[0])
+                sides.append(width)
+            else: 
+                height = int(side)
+                width = int(side * style['image'].size[0]/style['image'].size[1])
+                sides.append(height)
+            style['image'] = style['image'].resize((width, height))
+            print(style['image'].size)
+            # if()
+            print(height, width)
+            # sides.append(int(np.min(style['image'].size)/np.max(style['image'].size)*style['scale']/content_side * 512))
+            print(style.keys())
+        style_side = np.min(sides)
+        print('style side:', style_side)
+
+        
+        
+
+        with torch.no_grad():
+        # center crop content, to stylle
+
+            content['style_image'] = central_crop([content['image']], style_side, style_side)[0]
+            print(content['style_image'].size)
+            content['content_embedding'] = image2embedding_style(content['image'])
+            content['style_embedding'] = image2embedding_style(content['style_image'])
+
+
+        # crop styles
+            for style in styles:
+                style['image'] = central_crop([style['image']], style_side, style_side)[0]
+                style['style_embedding'] = image2embedding_style(style['image'])
+            
+            # do transfer
+
+            style_to_transfer = content['style_embedding']
+            weight = content['content_weight']
+            for k in style_to_transfer:
+                style_to_transfer[k] = weight * style_to_transfer[k]
+            for style in styles:
+                weight = weight + style['weight']
+                # print('style weight', style['weight'])
+                for k in style_to_transfer:
+                    style_to_transfer[k] = style_to_transfer[k]+style['style_embedding'][k]*style['weight']
+                    
+            for k in style_to_transfer:
+                print('shape', style_to_transfer[k].size())
+                print('content shape', content['content_embedding'][k].size())
+                style_to_transfer[k] = style_to_transfer[k]/weight
+            # print('weight',weight)
+            
+            gen_result = SA_decoder(SA_transform(content['content_embedding']['relu4_1'], style_to_transfer['relu4_1'], content['content_embedding']['relu5_1'], style_to_transfer['relu5_1']))
+            gen_result.clamp(0, 255)
+        gen_result = gen_result.cpu()
+        # print(gen_result)
+        im = imTOPIL(gen_result)
+        # im = transforms.ToPILImage()(gen_result[0])
+        # im = Image.fromarray(np.transpose(gen_result.numpy()[0],(1, 2, 0)), 'RGB')
+        # im.save('./test_int0.png')
+        im = im.resize((content['content_mask'].size))
+        transparent_background = Image.new('RGBA', (im.size), (255,255,255,0))
+        content['content_mask'] = content['content_mask'].convert('L')
+        # im.save('./test_int.png')
+        # print(im.size, transparent_background.size, content['content_mask'].size)
+        im = Image.composite(im, transparent_background, content['content_mask'])
+        im_in_image = Image.new('RGBA', (1000, 1000), (255,255,255,0))
+        im_in_image.paste(im, (content['content_position']['left'], content['content_position']['top']))
+        # im_in_image.save('./test.png')
+        buffer = BytesIO()
+        # transparent_background.save(buffer, format="PNG")
+        im_in_image.save(buffer, format="PNG")
+        image_file = base64.b64encode(buffer.getvalue()).decode()
+        image_file = 'data:image/png;base64,{}'.format(image_file)
+        # im.save('./test.png')
+        
+        # save_image(gen_result, './test_ori.png')
+        return {'returned_image': image_file}
+
+    return {'message': 'No GET ability'}
+
+def image2embedding_style(image):
+    style_tf = test_transform()
+    style = style_tf(image)
+    style = style.to(device).unsqueeze(0)
+    Style4_1 = enc_4(enc_3(enc_2(enc_1(style))))
+    Style5_1 = enc_5(Style4_1)
+
+    return {
+        'relu4_1': Style4_1,
+        'relu5_1': Style5_1
+    }
+
 
 @app.route('/randomSearchImage', methods=['GET', 'POST'])
 def randomSearchImage():
