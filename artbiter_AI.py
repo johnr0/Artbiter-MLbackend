@@ -23,6 +23,8 @@ from torchvision.utils import save_image, make_grid
 from torchvision import transforms
 import torch.nn as nn
 
+import collections
+
 image_data_path = '../../Data/wikiart/'
 
 global vgg_layers
@@ -154,9 +156,9 @@ def trainCAV():
             print(embeddings[key].shape)
         print(embeddings.keys())
         if len(embeddings.keys())==1:
-            cavs = train_concepts(embeddings, random_sampled)
+            cavs, _, _ = train_concepts(embeddings, random_sampled)
         else:
-            cavs = train_concepts(embeddings)
+            cavs, _, _ = train_concepts(embeddings)
         print(cavs)
         for key in cavs:
             cavs[key] = cavs[key].tolist()
@@ -210,9 +212,9 @@ def trainStyleCAV():
             print(embeddings[group_key].shape)
         print(embeddings.keys())
         if len(embeddings.keys())==1:
-            cavs = train_concepts(embeddings, random_sampled_long, dim=501760)
+            cavs, _, _ = train_concepts(embeddings, random_sampled_long, dim=501760)
         else:
-            cavs = train_concepts(embeddings, dim=501760)
+            cavs, _, _ = train_concepts(embeddings, dim=501760)
         print(cavs.keys())
         print(dims.keys())
         fdim = dims[list(dims.keys())[0]]
@@ -488,6 +490,132 @@ def randomSearchImage():
             returned_images.append(image_file)
         
         return {'returned_images': json.dumps(returned_images)}
+    return {'message': 'No GET ability'}
+
+@app.route('/revealDisagreement', methods=['GET', 'POST'])
+def revealDisagreement():
+    if request.method == 'POST':
+        users = json.loads(request.data['users'])
+        group_id = request.data['group_id']
+
+        for user in users:
+            for key in users[user]:
+                users[user][key] = np.asarray(users[user][key])
+        user_lms={}
+        user_y={}
+        user_confidence={}
+
+        for i in range(10):
+            for user in users:
+                cav, lm , label2text = train_concepts(users[user])
+                y = lm.predict(tree.get_arrays()[0])
+                confidence = lm.decision_function(tree.get_arrays()[0])
+                label_idx = label2text.index(group_id)
+                if user not in user_y:
+                    user_y[user] = y
+                    user_confidence[user] = np.abs(confidence)[:, label_idx]
+                else:
+                    user_y[user] = np.where(y==user_y[user], y, -1)
+                    user_confidence[user] = np.where(y==user_y[user], user_confidence[user]+np.abs(confidence)[:, label_idx], -1)
+        for user in users:
+            user_confidence[user] = user_confidence[user]/10
+
+        user_agreements = None
+        user_distances = None
+        
+        for user in user_y:
+            user_y[user] = np.where(user_y[user]==label_idx, -2, user_y[user])
+            user_y[user] = np.where(user_y[user]>=0, 0, user_y[user])
+            user_y[user] = np.where(user_y[user]==-2, 1, user_y[user])
+            if user_agreements is None:
+                user_agreements = user_y[user]
+                user_distances = user_confidence[user]
+            else:
+                user_agreements = np.where(user_y[user]>=0, user_agreements + user_y[user], -1)
+                user_distances = np.where(user_confidence[user]>=0, user_distances + user_confidence[user], -1)
+        print(collections.Counter(user_agreements))
+        user_agreements = np.where(user_agreements>=0, user_agreements/len(user_y.keys()), -1)
+        user_agreements = np.where(user_agreements>=0, np.abs(user_agreements-0.5), 5)
+        agreement_idx = np.argsort(user_agreements)
+        print(user_agreements, len(np.where(user_agreements>=0)[0]), len(user_distances))
+        print(agreement_idx, np.sort(user_agreements))
+        print(collections.Counter(user_agreements))
+
+        # get minimum from idx
+        min_agreement = np.min(user_agreements)
+
+        # get maximum distance among them
+        user_distances = np.where(user_agreements==min_agreement, user_distances, -1)
+        disagree_args = np.argsort(user_distances)[::-1]
+
+        returned_images = []
+        for idx in disagree_args[0:5]:
+            print(user_agreements[idx], user_distances[idx])
+            image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
+            image_file = 'data:image/png;base64,{}'.format(image_file)
+            print(artlist[idx])
+            returned_images.append(image_file)
+
+
+        return {}
+
+        # for user in users:
+        #     cav, lm , label2text = train_concepts(users[user])
+        #     user_lms[user] = lm
+        #     print(label2text)
+        # print(user_lms, label2text)
+        # user_distances = None
+        # user_agreements = None
+        # label_idx = label2text.index(group_id)
+        
+
+
+        
+
+
+        # for user_lm in user_lms:
+        #     print(user_lms[user_lm].coef_.shape, label2text)
+        #     distance = user_lms[user_lm].decision_function(tree.get_arrays()[0])
+        #     y = user_lms[user_lm].predict(tree.get_arrays()[0])
+        #     print(len(distance))
+        #     print(y)
+        #     y = np.where(y==label_idx, 1, 0)
+        #     if user_distances is None:
+        #         user_distances = np.abs(distance)
+        #         user_agreements = y
+        #     else:
+        #         user_distances =  user_distances+np.abs(distance)
+        #         user_agreements = user_agreements + y
+        # user_agreements = user_agreements/len(user_lms.keys())
+        # user_agreements = -np.abs(user_agreements-0.5)+0.5
+        # print(np.abs(user_agreements-0.5))
+        # print(distance.shape)
+        # if len(label2text)<=2:
+        #     agreement_idx = np.argsort(user_agreements * distance)
+        #     # agreement_idx2 = np.argsort(user_agreements)
+        #     print('agreement idx', agreement_idx)
+        #     # print('agreement idx2', agreement_idx2)
+        # else:
+        #     distance = distance[:, label_idx]
+        #     agreement_idx = np.argsort(user_agreements * distance)
+        #     # agreement_idx2 = np.argsort(user_agreements)
+        #     print('agreement idx', agreement_idx)
+        #     # print('agreement idx2', agreement_idx2)
+        # searched_indexes = agreement_idx[0:5]
+        # print(searched_indexes)
+
+        # returned_images=[]
+
+        # for idx in searched_indexes:
+        #     image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
+        #     image_file = 'data:image/png;base64,{}'.format(image_file)
+        #     print(artlist[idx])
+        #     returned_images.append(image_file)
+        
+
+
+        # return {'returned_images': json.dumps(returned_images)}
+
     return {'message': 'No GET ability'}
 
 if __name__=="__main__":

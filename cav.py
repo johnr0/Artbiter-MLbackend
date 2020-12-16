@@ -162,8 +162,8 @@ def train_concepts(embedding_dict, random_sampled=None, dim=300, model_type='lin
         label2text.append('_random')
         data = np.append(data, random_sampled, axis=0)
         labels = [label2text.index('_random') for i in range(random_sampled.shape[0])]
-    
-    for concept in embedding_dict:
+         
+    for concept in sorted(embedding_dict.keys()):
         label2text.append(concept)
         data = np.append(data, embedding_dict[concept], axis = 0)
         labels = labels + [label2text.index(concept) for a in embedding_dict[concept]]
@@ -199,7 +199,7 @@ def train_concepts(embedding_dict, random_sampled=None, dim=300, model_type='lin
     else:
         for idx, l2t in enumerate(label2text):
             cavs[l2t] = lm.coef_[idx]
-    return cavs
+    return cavs, lm, label2text
 
 
 
