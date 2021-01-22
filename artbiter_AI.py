@@ -497,6 +497,16 @@ def revealDisagreement():
     if request.method == 'POST':
         users = json.loads(request.data['users'])
         group_id = request.data['group_id']
+        group_arts = json.loads(request.data['group_arts'])
+        avg_art = None
+        # for art in group_arts: 
+        #     if avg_art is None:
+        #         avg_art = np.asarray(group_arts[art])
+        #     else:
+        #         avg_art = avg_art + np.asarray(group_arts[art])
+        # avg_art = avg_art/len(group_arts.keys())
+        print(avg_art, 'avg_art')
+        print(group_id)
 
         for user in users:
             for key in users[user]:
@@ -504,21 +514,53 @@ def revealDisagreement():
         user_lms={}
         user_y={}
         user_confidence={}
+        lms = {}
 
-        for i in range(10):
+        for i in range(2):
             for user in users:
-                cav, lm , label2text = train_concepts(users[user])
+                if len(users[user].keys())==1:
+                    cav, lm , label2text = train_concepts(users[user], random_sampled)
+                else:
+                    cav, lm , label2text = train_concepts(users[user])
                 y = lm.predict(tree.get_arrays()[0])
                 confidence = lm.decision_function(tree.get_arrays()[0])
                 label_idx = label2text.index(group_id)
+                print(len(confidence.shape), label_idx)
+                lms[user] = lm
                 if user not in user_y:
                     user_y[user] = y
-                    user_confidence[user] = np.abs(confidence)[:, label_idx]
+                    if len(confidence.shape)==1:
+                        user_confidence[user] = np.abs(confidence)
+                    else:
+                        user_confidence[user] = np.abs(confidence)[:, label_idx]
                 else:
                     user_y[user] = np.where(y==user_y[user], y, -1)
-                    user_confidence[user] = np.where(y==user_y[user], user_confidence[user]+np.abs(confidence)[:, label_idx], -1)
+                    if len(confidence.shape)==1:
+                        user_confidence[user] = np.where(y==user_y[user], user_confidence[user]+np.abs(confidence), -1)
+                    else:
+                        user_confidence[user] = np.where(y==user_y[user], user_confidence[user]+np.abs(confidence)[:, label_idx], -1)
         for user in users:
-            user_confidence[user] = user_confidence[user]/10
+            cur_avg_art = None
+            cnt = 0
+            for key in users[user]:
+                if key == group_id:
+                    for art in users[user][key]:
+                        print(art, 'art')
+                        if cur_avg_art is None:
+                            cur_avg_art = art
+                        else:
+                            cur_avg_art = cur_avg_art + art
+                        cnt=cnt+1
+            cur_avg_art = cur_avg_art / cnt#len(users[user].keys())
+            if avg_art is None:
+                avg_art = cur_avg_art
+            else:
+                avg_art = avg_art + cur_avg_art
+        avg_art = avg_art/len(users.keys())
+        dist = np.linalg.norm(avg_art-tree.get_arrays()[0], axis=1)
+        print(dist.shape)
+        for user in users:
+            user_confidence[user] = np.where(user_confidence[user]>=0, dist, np.inf)
 
         user_agreements = None
         user_distances = None
@@ -532,7 +574,7 @@ def revealDisagreement():
                 user_distances = user_confidence[user]
             else:
                 user_agreements = np.where(user_y[user]>=0, user_agreements + user_y[user], -1)
-                user_distances = np.where(user_confidence[user]>=0, user_distances + user_confidence[user], -1)
+                user_distances = np.where(user_confidence[user]>=0, user_distances + user_confidence[user], np.inf)
         print(collections.Counter(user_agreements))
         user_agreements = np.where(user_agreements>=0, user_agreements/len(user_y.keys()), -1)
         user_agreements = np.where(user_agreements>=0, np.abs(user_agreements-0.5), 5)
@@ -545,19 +587,34 @@ def revealDisagreement():
         min_agreement = np.min(user_agreements)
 
         # get maximum distance among them
-        user_distances = np.where(user_agreements==min_agreement, user_distances, -1)
-        disagree_args = np.argsort(user_distances)[::-1]
+        user_distances = np.where(user_agreements==min_agreement, user_distances, np.inf)
+        disagree_args = np.argsort(user_distances)#[::-1]
 
         returned_images = []
-        for idx in disagree_args[0:5]:
+        for idx in disagree_args[0:1]:
             print(user_agreements[idx], user_distances[idx])
             image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
             image_file = 'data:image/png;base64,{}'.format(image_file)
             print(artlist[idx])
-            returned_images.append(image_file)
+            
+            user_decisions = {}
+            for user in user_y:
+                dec = lms[user].predict([tree.get_arrays()[0][idx]])
+                user_decisions[user] = label2text[dec[0]]
+                if user_decisions[user]!=group_id:
+                    user_decisions[user] = 'not_'+group_id
+            print(user_decisions)
+            image = {
+                'image_file': image_file,
+                'user_decisions': user_decisions
+            }
+
+            returned_images.append(image)
 
 
-        return {}
+        return {
+            'returned_images': json.dumps(returned_images)
+        }
 
         # for user in users:
         #     cav, lm , label2text = train_concepts(users[user])
@@ -619,4 +676,4 @@ def revealDisagreement():
     return {'message': 'No GET ability'}
 
 if __name__=="__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0')
