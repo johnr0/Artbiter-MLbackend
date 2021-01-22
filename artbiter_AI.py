@@ -320,14 +320,20 @@ def generateImage():
         content = json.loads(request.data['content'])
         content_weight = float(request.data['content_weight'])
         for k in content:
-            content[k] = torch.FloatTensor(content[k])
+            if torch.cuda.is_available():
+                content[k] = torch.cuda.FloatTensor(content[k])
+            else:
+                content[k] = torch.FloatTensor(content[k])
         styles = json.loads(request.data['styles'])
         style_weights=json.loads(request.data['style_weights'])
         style={}
         for k in content:
             s=content[k]*content_weight
             for sk in styles:
-                s = s + style_weights[sk] * torch.FloatTensor(styles[sk][k])
+                if torch.cuda.is_available():
+                    s = s + style_weights[sk] * torch.cuda.FloatTensor(styles[sk][k])
+                else:
+                    s = s + style_weights[sk] * torch.FloatTensor(styles[sk][k])
             style[k] = s
         for k in content:
             print(k)
