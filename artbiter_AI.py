@@ -107,6 +107,7 @@ def example():
 
 @app.route('/image_to_embedding', methods=['GET', 'POST'])
 def image_to_embedding():
+    print('image embedding...')
     if request.method == 'POST':
         # print(request.data.keys())
         ori_img = openImage(request.data['image'])
