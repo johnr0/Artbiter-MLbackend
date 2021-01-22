@@ -423,6 +423,7 @@ def generateImageWithScaling():
         # crop styles
             for style in styles:
                 style['image'] = central_crop([style['image']], style_side, style_side)[0]
+                print(style['image'].size)
                 style['style_embedding'] = image2embedding_style(style['image'])
             
             # do transfer
