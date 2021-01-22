@@ -53,8 +53,9 @@ random_sampled = tree.get_arrays()[0][random_sampled]
 app = FlaskAPI(__name__)
 
 background = Image.new('RGB', (224, 224), (255,255,255))
-
+print('cuda?',torch.cuda.is_available())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 SA_decoder = decoder
 SA_transform = Transform(in_planes = 512)
 SA_vgg = SA_vgg
