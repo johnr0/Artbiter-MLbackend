@@ -177,17 +177,25 @@ def train_concepts(embedding_dict, random_sampled=None, dim=300, model_type='lin
 
     lm.fit(data, labels)
     label_pred = lm.predict(data)
+    label_dec = lm.decision_function(data)
     num_classes = max(labels)+1
     acc = {}
+    dec = {}
     num_correct = 0
-    print(labels, label_pred)
+    print(labels, label_pred, label_dec)
+
+
+
     for class_id in range(num_classes):
         idx = (labels==class_id)
+        dec[label2text[class_id]] = np.mean(label_dec[idx])
+
+
         acc[label2text[class_id]] = metrics.accuracy_score(label_pred[idx], labels[idx])
         num_correct += (sum(idx) *acc[label2text[class_id]]) 
     acc['overall'] = float(num_correct) / float(len(labels))
 
-    print(acc)
+    print(acc, dec)
 
     # conf = lm.decision_function()
     if len(lm.coef_)==1:
@@ -199,7 +207,9 @@ def train_concepts(embedding_dict, random_sampled=None, dim=300, model_type='lin
     else:
         for idx, l2t in enumerate(label2text):
             cavs[l2t] = lm.coef_[idx]
-    return cavs, lm, label2text
+
+    
+    return cavs, lm, label2text, dec
 
 
 

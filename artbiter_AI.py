@@ -158,10 +158,12 @@ def trainCAV():
             print(embeddings[key].shape)
         print(embeddings.keys())
         if len(embeddings.keys())==1:
-            cavs, _, _ = train_concepts(embeddings, random_sampled)
+            cavs, lm, l2t, dec = train_concepts(embeddings, random_sampled)
         else:
-            cavs, _, _ = train_concepts(embeddings)
+            cavs, lm, l2t, dec = train_concepts(embeddings)
         print(cavs)
+
+
         for key in cavs:
             cavs[key] = cavs[key].tolist()
 
@@ -175,10 +177,13 @@ def trainCAV():
         #         for style in group_style:
         #             style_vec = style_vec+style[dim]
         #         avg_styles[key][dim] = (style_vec / len(group_style)).tolist()
-            
+        
 
-
-        return {'cavs': json.dumps(cavs)}
+        group_model = {}
+        group_model['coef'] = lm.coef_.tolist()
+        print(l2t)
+        group_model['intercept'] = lm.intercept_.tolist()
+        return {'cavs': json.dumps(cavs), 'group_model': group_model, 'l2t': l2t, 'dec': dec}
 
     return {'message': 'No GET ability'}
 
@@ -681,6 +686,48 @@ def revealDisagreement():
 
 
         # return {'returned_images': json.dumps(returned_images)}
+
+    return {'message': 'No GET ability'}
+
+@app.route('/labelImages', methods=['GET', 'POST'])
+def labelImages():
+    if request.method == 'POST':
+        images = json.loads(request.data['images'])
+        group_model = json.loads(request.data['group_model'])
+        l2t = json.loads(request.data['l2t'])
+        dec = json.loads(request.data['dec'])
+        # print(images, group_model, l2t, dec)
+
+        lm = linear_model.SGDClassifier(alpha=0.01, max_iter=1000, tol=1e-3)
+        lm.coef_ = np.asarray(group_model['coef'])
+        lm.intercept_ = np.asarray(group_model['intercept'])
+        lm.classes_ = np.asarray(list(range(len(l2t))))
+
+        res = {}
+
+        pred_res = lm.predict(list(images.values()))
+        dec_res = lm.decision_function(list(images.values()))
+        
+        for idx, key in enumerate(list(images.keys())):
+            
+            if l2t[pred_res[idx]]!='_random':
+                res[key] ={}
+                if isinstance(dec_res[idx], np.float64):
+                    res[key][l2t[pred_res[idx]]] = dec_res[idx]/dec[l2t[pred_res[idx]]]
+                else:
+                    print(dec_res[idx], pred_res[idx], dec[l2t[pred_res[idx]]], dec_res[idx][pred_res[idx]]/dec[l2t[pred_res[idx]]])
+                    res[key][l2t[pred_res[idx]]] = np.abs(dec_res[idx][pred_res[idx]]/dec[l2t[pred_res[idx]]])
+                # if isinstance(res[key][l2t[pred_res[idx]]], np.ndarray):
+                #     res[key][l2t[pred_res[idx]]] = res[key][l2t[pred_res[idx]]].tolist() 
+                # res[key][l2t[pred_res[idx]]] = res[key][l2t[pred_res[idx]]]
+            else:
+                res[key] = {}
+        
+        print(res)
+
+        return {'result': json.dumps(res)}
+
+        # print(pred_res, dec_res)
 
     return {'message': 'No GET ability'}
 
