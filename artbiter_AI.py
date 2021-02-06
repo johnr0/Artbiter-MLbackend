@@ -106,6 +106,7 @@ def imTOPIL(gen_result):
 def example():
     return {'hello': 'world'}
 
+# deep function
 @app.route('/image_to_embedding', methods=['GET', 'POST'])
 def image_to_embedding():
     print('image embedding...')
@@ -148,6 +149,7 @@ def image_to_embedding():
 
     return {'message': 'No GET ability'}
 
+# simple function
 @app.route('/trainCAV', methods=['GET', 'POST'])
 def trainCAV():
     if request.method == 'POST':
@@ -187,6 +189,7 @@ def trainCAV():
 
     return {'message': 'No GET ability'}
 
+# simple function
 @app.route('/trainStyleCAV', methods=['GET', 'POST'])
 def trainStyleCAV():
     if request.method == 'POST':
@@ -244,6 +247,7 @@ def trainStyleCAV():
 
     return {'message': 'No GET ability'}
 
+# simple function
 @app.route('/sliderImpact', methods=['GET', 'POST'])
 def sliderImpact():
     if request.method=='POST':
@@ -295,6 +299,7 @@ def sliderImpact():
 
     return {'message': ' No GET ability'}
 
+# simple function
 @app.route('/searchImages', methods=['GET', 'POST'])
 def searchImages():
     if request.method=='POST':
@@ -319,6 +324,7 @@ def searchImages():
 
     return {'message': 'No GET ability'}
 
+# deep 
 @app.route('/generateImage', methods=['GET', 'POST'])
 def generateImage():
     if request.method=='POST':
@@ -368,6 +374,7 @@ def generateImage():
 
     return {'message': 'No GET ability'}
 
+# deep
 @app.route('/generateImageWithScaling', methods=['GET', 'POST'])
 def generateImageWithScaling():
     if request.method=='POST':
@@ -478,6 +485,7 @@ def generateImageWithScaling():
 
     return {'message': 'No GET ability'}
 
+#deep
 def image2embedding_style(image):
     style_tf = test_transform()
     style = style_tf(image)
@@ -490,7 +498,7 @@ def image2embedding_style(image):
         'relu5_1': Style5_1
     }
 
-
+# simple
 @app.route('/randomSearchImage', methods=['GET', 'POST'])
 def randomSearchImage():
     if request.method=='POST':
@@ -506,6 +514,7 @@ def randomSearchImage():
         return {'returned_images': json.dumps(returned_images)}
     return {'message': 'No GET ability'}
 
+# simple
 @app.route('/revealDisagreement', methods=['GET', 'POST'])
 def revealDisagreement():
     if request.method == 'POST':
@@ -689,6 +698,7 @@ def revealDisagreement():
 
     return {'message': 'No GET ability'}
 
+# simple
 @app.route('/labelImages', methods=['GET', 'POST'])
 def labelImages():
     if request.method == 'POST':
