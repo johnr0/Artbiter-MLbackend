@@ -703,35 +703,43 @@ def revealDisagreement():
 def labelImages():
     if request.method == 'POST':
         images = json.loads(request.data['images'])
-        group_model = json.loads(request.data['group_model'])
-        l2t = json.loads(request.data['l2t'])
-        dec = json.loads(request.data['dec'])
+        group_models = json.loads(request.data['group_model'])
+        l2ts = json.loads(request.data['l2t'])
+        decs = json.loads(request.data['dec'])
         # print(images, group_model, l2t, dec)
 
-        lm = linear_model.SGDClassifier(alpha=0.01, max_iter=1000, tol=1e-3)
-        lm.coef_ = np.asarray(group_model['coef'])
-        lm.intercept_ = np.asarray(group_model['intercept'])
-        lm.classes_ = np.asarray(list(range(len(l2t))))
+        
 
         res = {}
 
-        pred_res = lm.predict(list(images.values()))
-        dec_res = lm.decision_function(list(images.values()))
-        
-        for idx, key in enumerate(list(images.keys())):
+        for gidx, group_model in enumerate(group_models):
+
+            l2t = l2ts[gidx]
+            dec = decs[gidx]
+
+            lm = linear_model.SGDClassifier(alpha=0.01, max_iter=1000, tol=1e-3)
+            lm.coef_ = np.asarray(group_model['coef'])
+            lm.intercept_ = np.asarray(group_model['intercept'])
+            lm.classes_ = np.asarray(list(range(len(l2t))))
+
+            pred_res = lm.predict(list(images.values()))
+            dec_res = lm.decision_function(list(images.values()))
             
-            if l2t[pred_res[idx]]!='_random':
-                res[key] ={}
-                if isinstance(dec_res[idx], np.float64):
-                    res[key][l2t[pred_res[idx]]] = dec_res[idx]/dec[l2t[pred_res[idx]]]
+            for idx, key in enumerate(list(images.keys())):
+                
+                if l2t[pred_res[idx]]!='_random':
+                    if key not in res:
+                        res[key] ={}
+                    if isinstance(dec_res[idx], np.float64):
+                        res[key][l2t[pred_res[idx]]] = dec_res[idx]/dec[l2t[pred_res[idx]]]
+                    else:
+                        print(dec_res[idx], pred_res[idx], dec[l2t[pred_res[idx]]], dec_res[idx][pred_res[idx]]/dec[l2t[pred_res[idx]]])
+                        res[key][l2t[pred_res[idx]]] = np.abs(dec_res[idx][pred_res[idx]]/dec[l2t[pred_res[idx]]])
+                    # if isinstance(res[key][l2t[pred_res[idx]]], np.ndarray):
+                    #     res[key][l2t[pred_res[idx]]] = res[key][l2t[pred_res[idx]]].tolist() 
+                    # res[key][l2t[pred_res[idx]]] = res[key][l2t[pred_res[idx]]]
                 else:
-                    print(dec_res[idx], pred_res[idx], dec[l2t[pred_res[idx]]], dec_res[idx][pred_res[idx]]/dec[l2t[pred_res[idx]]])
-                    res[key][l2t[pred_res[idx]]] = np.abs(dec_res[idx][pred_res[idx]]/dec[l2t[pred_res[idx]]])
-                # if isinstance(res[key][l2t[pred_res[idx]]], np.ndarray):
-                #     res[key][l2t[pred_res[idx]]] = res[key][l2t[pred_res[idx]]].tolist() 
-                # res[key][l2t[pred_res[idx]]] = res[key][l2t[pred_res[idx]]]
-            else:
-                res[key] = {}
+                    res[key] = {}
         
         print(res)
 
