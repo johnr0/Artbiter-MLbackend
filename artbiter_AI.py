@@ -94,6 +94,22 @@ def openImage(raw_img):
         img = img.convert('RGB')
     return img
 
+def openContentImage(raw_img):
+    image_data = re.sub('^data:image/.+;base64.', '',raw_img)
+        # print(image_data[0:10])
+    byte_data = base64.b64decode(image_data)
+    image_data = BytesIO(byte_data)
+    img =Image.open(image_data)
+    # if img.mode=='RGBA':
+    #     bg = Image.new('RGBA', (img.width, img.height), (255,255,255))
+    #     bg.paste(img)
+    #     img=bg
+    #     print('image mode', bg.mode, img.mode)
+        # return bg
+    if img.mode=='RGBA' or img.mode=='L':
+        img = img.convert('RGB')
+    return img
+
 def imTOPIL(gen_result):
     grid = make_grid(gen_result, nrow=8, padding=2, pad_value=False,
                      normalize=False, range=None, scale_each=False)
@@ -383,7 +399,8 @@ def generateImageWithScaling():
 
         # get the dimensions first
         print(content.keys())
-        content['image']= openImage(content['content_image'])
+        content['image']= openContentImage(content['content_image'])
+        # content['image']= Image.alpha_composite(background, content['image'])
         content['content_mask'] = openImage(content['content_mask'])
         content['content_mask'] = content['content_mask'].crop((content['content_position']['left'], content['content_position']['top'], content['content_position']['right'], content['content_position']['bottom']))
         print(content['image'].size)
