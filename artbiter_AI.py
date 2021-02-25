@@ -738,7 +738,7 @@ def labelImages():
             lm.coef_ = np.asarray(group_model['coef'])
             lm.intercept_ = np.asarray(group_model['intercept'])
             lm.classes_ = np.asarray(list(range(len(l2t))))
-
+            print(images.values())
             pred_res = lm.predict(list(images.values()))
             dec_res = lm.decision_function(list(images.values()))
             
