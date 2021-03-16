@@ -173,13 +173,13 @@ def trainCAV():
         embeddings = json.loads(request.data['embeddings'])
         for key in embeddings:
             embeddings[key] = np.asarray(embeddings[key])
-            print(embeddings[key].shape)
+            # print(embeddings[key].shape)
         print(embeddings.keys())
         if len(embeddings.keys())==1:
             cavs, lm, l2t, dec = train_concepts(embeddings, random_sampled)
         else:
             cavs, lm, l2t, dec = train_concepts(embeddings)
-        print(cavs)
+        # print(cavs)
 
 
         for key in cavs:
@@ -298,7 +298,7 @@ def sliderImpact():
                     v_arr = v_arr + tree_arr[0][idx]
                 # print(v_arr/10)
                 vectors.append(v_arr/num)
-            standard_arr = base_arr + search_slider_values[key1] * cavs[key1]
+            base_arr = base_arr + search_slider_values[key1] * cavs[key1]
             for j in range(9):
                 # print(vectors[j]-vectors[0])
                 distance.append(np.linalg.norm(vectors[j]-cur_image))
@@ -328,12 +328,21 @@ def searchImages():
         # print('search embedding', search_embedding)
 
         searched_indexes = tree.query(search_embedding.reshape((1, 300)), k=10)
-        print('searched indexes', searched_indexes[1][0])
+        # print('searched indexes', searched_indexes[1][0])
         returned_images = []
         for idx in searched_indexes[1][0]:
-            image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
+            cur_img = Image.open(os.path.join(image_data_path, artlist[idx]))
+            w = cur_img.size[0]
+            h = cur_img.size[1]
+            if w>h:
+                cur_img.resize((512, int(512/w*h)))
+            else:
+                cur_img.resize((int(512/h*w), 512))
+            buffer = BytesIO()
+            cur_img.save(buffer, format="PNG")
+            image_file = base64.b64encode(buffer.getvalue()).decode()#base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
             image_file = 'data:image/png;base64,{}'.format(image_file)
-            print(image_file)
+            print('one image searched')
             returned_images.append(image_file)
         
         return {'returned_images': json.dumps(returned_images)}
@@ -362,17 +371,17 @@ def generateImage():
                 else:
                     s = s + style_weights[sk] * torch.FloatTensor(styles[sk][k])
             style[k] = s
-        for k in content:
-            print(k)
-            print(content[k].shape, style[k].shape)
+        # for k in content:
+        #     print(k)
+        #     print(content[k].shape, style[k].shape)
         with torch.no_grad():
             start_time = time.time()
             gen_result = SA_decoder(SA_transform(content['relu4_1'], style['relu4_1'], content['relu5_1'], style['relu5_1']))
-            print('time', time.time()-start_time)
+            # print('time', time.time()-start_time)
             
             gen_result.clamp(0, 255)
         gen_result = gen_result.cpu()
-        print(gen_result)
+        # print(gen_result)
         # im_np = gen_result.numpy()
         # print(im_np.shape)
         # im = Image.fromarray(np.uint8(im_np*255))
@@ -398,12 +407,12 @@ def generateImageWithScaling():
         styles = json.loads(request.data['styles'])
 
         # get the dimensions first
-        print(content.keys())
+        # print(content.keys())
         content['image']= openContentImage(content['content_image'])
         # content['image']= Image.alpha_composite(background, content['image'])
         content['content_mask'] = openImage(content['content_mask'])
         content['content_mask'] = content['content_mask'].crop((content['content_position']['left'], content['content_position']['top'], content['content_position']['right'], content['content_position']['bottom']))
-        print(content['image'].size)
+        # print(content['image'].size)
         if content['image'].size[0]>content['image'].size[1]:
             content_width = 512
             content_height = int(512 * content['image'].size[1]/content['image'].size[0])
@@ -412,7 +421,7 @@ def generateImageWithScaling():
             content_height = 512
             content_width = int(512 * content['image'].size[0]/content['image'].size[1])
             content_side = content_width
-        print(content_height, content_width, content_side)
+        # print(content_height, content_width, content_side)
         sides = []
         sides.append(content_side)
         content['image'] = content['image'].resize([content_width, content_height])
@@ -429,13 +438,13 @@ def generateImageWithScaling():
                 width = int(side * style['image'].size[0]/style['image'].size[1])
                 sides.append(height)
             style['image'] = style['image'].resize((width, height))
-            print(style['image'].size)
+            # print(style['image'].size)
             # if()
-            print(height, width)
+            # print(height, width)
             # sides.append(int(np.min(style['image'].size)/np.max(style['image'].size)*style['scale']/content_side * 512))
-            print(style.keys())
+            # print(style.keys())
         style_side = np.min(sides)
-        print('style side:', style_side)
+        # print('style side:', style_side)
 
         
         
@@ -444,7 +453,7 @@ def generateImageWithScaling():
         # center crop content, to stylle
 
             content['style_image'] = central_crop([content['image']], style_side, style_side)[0]
-            print(content['style_image'].size)
+            # print(content['style_image'].size)
             content['content_embedding'] = image2embedding_style(content['image'])
             content['style_embedding'] = image2embedding_style(content['style_image'])
 
@@ -452,7 +461,7 @@ def generateImageWithScaling():
         # crop styles
             for style in styles:
                 style['image'] = central_crop([style['image']], style_side, style_side)[0]
-                print(style['image'].size)
+                # print(style['image'].size)
                 style['style_embedding'] = image2embedding_style(style['image'])
             
             # do transfer
@@ -468,8 +477,8 @@ def generateImageWithScaling():
                     style_to_transfer[k] = style_to_transfer[k]+style['style_embedding'][k]*style['weight']
                     
             for k in style_to_transfer:
-                print('shape', style_to_transfer[k].size())
-                print('content shape', content['content_embedding'][k].size())
+                # print('shape', style_to_transfer[k].size())
+                # print('content shape', content['content_embedding'][k].size())
                 style_to_transfer[k] = style_to_transfer[k]/weight
             # print('weight',weight)
             
@@ -525,7 +534,7 @@ def randomSearchImage():
         for idx in sampled:
             image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
             image_file = 'data:image/png;base64,{}'.format(image_file)
-            print(image_file)
+            # print(image_file)
             returned_images.append(image_file)
         
         return {'returned_images': json.dumps(returned_images)}
@@ -545,8 +554,8 @@ def revealDisagreement():
         #     else:
         #         avg_art = avg_art + np.asarray(group_arts[art])
         # avg_art = avg_art/len(group_arts.keys())
-        print(avg_art, 'avg_art')
-        print(group_id)
+        # print(avg_art, 'avg_art')
+        # print(group_id)
 
         for user in users:
             for key in users[user]:
@@ -565,7 +574,7 @@ def revealDisagreement():
                 y = lm.predict(tree.get_arrays()[0])
                 confidence = lm.decision_function(tree.get_arrays()[0])
                 label_idx = label2text.index(group_id)
-                print(len(confidence.shape), label_idx)
+                # print(len(confidence.shape), label_idx)
                 lms[user] = lm
                 if user not in user_y:
                     user_y[user] = y
@@ -585,7 +594,7 @@ def revealDisagreement():
             for key in users[user]:
                 if key == group_id:
                     for art in users[user][key]:
-                        print(art, 'art')
+                        # print(art, 'art')
                         if cur_avg_art is None:
                             cur_avg_art = art
                         else:
@@ -598,7 +607,7 @@ def revealDisagreement():
                 avg_art = avg_art + cur_avg_art
         avg_art = avg_art/len(users.keys())
         dist = np.linalg.norm(avg_art-tree.get_arrays()[0], axis=1)
-        print(dist.shape)
+        # print(dist.shape)
         for user in users:
             user_confidence[user] = np.where(user_confidence[user]>=0, dist, np.inf)
 
@@ -615,13 +624,13 @@ def revealDisagreement():
             else:
                 user_agreements = np.where(user_y[user]>=0, user_agreements + user_y[user], -1)
                 user_distances = np.where(user_confidence[user]>=0, user_distances + user_confidence[user], np.inf)
-        print(collections.Counter(user_agreements))
+        # print(collections.Counter(user_agreements))
         user_agreements = np.where(user_agreements>=0, user_agreements/len(user_y.keys()), -1)
         user_agreements = np.where(user_agreements>=0, np.abs(user_agreements-0.5), 5)
         agreement_idx = np.argsort(user_agreements)
-        print(user_agreements, len(np.where(user_agreements>=0)[0]), len(user_distances))
-        print(agreement_idx, np.sort(user_agreements))
-        print(collections.Counter(user_agreements))
+        # print(user_agreements, len(np.where(user_agreements>=0)[0]), len(user_distances))
+        # print(agreement_idx, np.sort(user_agreements))
+        # print(collections.Counter(user_agreements))
 
         # get minimum from idx
         min_agreement = np.min(user_agreements)
@@ -632,10 +641,10 @@ def revealDisagreement():
 
         returned_images = []
         for idx in disagree_args[0:1]:
-            print(user_agreements[idx], user_distances[idx])
+            # print(user_agreements[idx], user_distances[idx])
             image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
             image_file = 'data:image/png;base64,{}'.format(image_file)
-            print(artlist[idx])
+            # print(artlist[idx])
             
             user_decisions = {}
             for user in user_y:
@@ -643,7 +652,7 @@ def revealDisagreement():
                 user_decisions[user] = label2text[dec[0]]
                 if user_decisions[user]!=group_id:
                     user_decisions[user] = 'not_'+group_id
-            print(user_decisions)
+            # print(user_decisions)
             image = {
                 'image_file': image_file,
                 'user_decisions': user_decisions
@@ -738,7 +747,7 @@ def labelImages():
             lm.coef_ = np.asarray(group_model['coef'])
             lm.intercept_ = np.asarray(group_model['intercept'])
             lm.classes_ = np.asarray(list(range(len(l2t))))
-            print(images.values())
+            # print(images.values())
             pred_res = lm.predict(list(images.values()))
             dec_res = lm.decision_function(list(images.values()))
             
@@ -758,7 +767,7 @@ def labelImages():
                 else:
                     res[key] = {}
         
-        print(res)
+        # print(res)
 
         return {'result': json.dumps(res)}
 

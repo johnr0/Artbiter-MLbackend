@@ -182,7 +182,7 @@ def train_concepts(embedding_dict, random_sampled=None, dim=300, model_type='lin
     acc = {}
     dec = {}
     num_correct = 0
-    print(labels, label_pred, label_dec)
+    # print(labels, label_pred, label_dec)
 
 
 
@@ -195,7 +195,7 @@ def train_concepts(embedding_dict, random_sampled=None, dim=300, model_type='lin
         num_correct += (sum(idx) *acc[label2text[class_id]]) 
     acc['overall'] = float(num_correct) / float(len(labels))
 
-    print(acc, dec)
+    # print(acc, dec)
 
     # conf = lm.decision_function()
     if len(lm.coef_)==1:
