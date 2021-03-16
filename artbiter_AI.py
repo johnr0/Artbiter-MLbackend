@@ -327,7 +327,7 @@ def searchImages():
             search_embedding = search_embedding + search_slider_values[group_key] * np.asarray(cavs[group_key])
         # print('search embedding', search_embedding)
 
-        searched_indexes = tree.query(search_embedding.reshape((1, 300)), k=10)
+        searched_indexes = tree.query(search_embedding.reshape((1, 300)), k=5)
         # print('searched indexes', searched_indexes[1][0])
         returned_images = []
         for idx in searched_indexes[1][0]:
@@ -529,7 +529,7 @@ def image2embedding_style(image):
 def randomSearchImage():
     if request.method=='POST':
         # list(range(tree.get_arrays()[0].shape[0]))
-        sampled = np.random.choice(tree.get_arrays()[0].shape[0], 10, replace=False)
+        sampled = np.random.choice(tree.get_arrays()[0].shape[0], 5, replace=False)
         returned_images = []
         for idx in sampled:
             image_file = base64.b64encode(open(os.path.join(image_data_path, artlist[idx]), 'rb').read()).decode()
