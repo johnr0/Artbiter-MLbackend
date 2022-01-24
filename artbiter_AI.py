@@ -353,6 +353,10 @@ def searchImages():
 @app.route('/generateImage', methods=['GET', 'POST'])
 def generateImage():
     if request.method=='POST':
+        print(request.data.keys())
+        content_image = openContentImage(request.data['content_image'])
+        content_embedding = image2embedding_style(content_image)
+        
         content = json.loads(request.data['content'])
         content_weight = float(request.data['content_weight'])
         for k in content:
@@ -376,7 +380,7 @@ def generateImage():
         #     print(content[k].shape, style[k].shape)
         with torch.no_grad():
             start_time = time.time()
-            gen_result = SA_decoder(SA_transform(content['relu4_1'], style['relu4_1'], content['relu5_1'], style['relu5_1']))
+            gen_result = SA_decoder(SA_transform(content_embedding['relu4_1'], style['relu4_1'], content_embedding['relu5_1'], style['relu5_1']))
             # print('time', time.time()-start_time)
             
             gen_result.clamp(0, 255)
